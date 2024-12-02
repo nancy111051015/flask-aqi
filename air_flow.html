@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Air Flow Dance</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      function getAQIFromURL() {
+        const params = new URLSearchParams(window.location.search);
+        return parseInt(params.get("aqi")) || 50;
+      }
+
+      const AirFlowDance = () => {
+        const canvasRef = React.useRef(null);
+        const [aqi, setAqi] = React.useState(getAQIFromURL());
+        const animationRef = React.useRef(null);
+
+        const getAQIColor = (value) => {
+          if (value <= 50) return "#00e800";
+          if (value <= 100) return "#ffd700";
+          if (value <= 150) return "#ff7e00";
+          if (value <= 200) return "#ff0000";
+          if (value <= 300) return "#99004c";
+          return "#7e0023";
+        };
+
+        const getAQIStatus = (value) => {
+          if (value <= 50) return "良好";
+          if (value <= 100) return "普通";
+          if (value <= 150) return "輕度污染";
+          if (value <= 200) return "中度污染";
+          if (value <= 300) return "重度污染";
+          return "嚴重污染";
+        };
+
+        React.useEffect(() => {
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return;
+
+          class Particle {
+            constructor() {
+              this.x = Math.random() * canvas.width;
+              this.y = Math.random() * canvas.height;
+              this.speed = 0;
+              this.size = 0;
+              this.angle = 0;
+              this.wobble = 0;
+              this.wobbleSpeed = 0;
+              this.reset();
+            }
+
+            reset() {
+              const baseSpeed = Math.min(aqi / 50, 6);
+              this.speed = baseSpeed * (Math.random() * 0.5 + 0.5);
+              this.size = Math.random() * 2 + 1;
+              this.angle = Math.random() * Math.PI * 2;
+              this.wobble = Math.random() * Math.PI * 2;
+              this.wobbleSpeed = 0.1 + Math.random() * 0.1;
+            }
+
+            update() {
+              this.wobble += this.wobbleSpeed;
+              const chaos = Math.min(aqi / 100, 3);
+              const wobbleStrength = chaos * Math.sin(this.wobble) * 0.3;
+
+              this.x += Math.cos(this.angle + wobbleStrength) * this.speed;
+              this.y += Math.sin(this.angle + wobbleStrength) * this.speed;
+
+              if (this.x < 0) this.x = canvas.width;
+              if (this.x > canvas.width) this.x = 0;
+              if (this.y < 0) this.y = canvas.height;
+              if (this.y > canvas.height) this.y = 0;
+
+              this.angle += (Math.random() - 0.5) * 0.1 * chaos;
+            }
+
+            draw() {
+              ctx.beginPath();
+              ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+              ctx.fillStyle = getAQIColor(aqi);
+              ctx.fill();
+            }
+          }
+
+          const particles = [];
+          const particleCount = Math.min(Math.floor(aqi * 1.5), 300);
+
+          for (let i = 0; i < particleCount; i++) {
+            particles.push(new Particle());
+          }
+
+          const animate = () => {
+            ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            particles.forEach((particle) => {
+              particle.update();
+              particle.draw();
+            });
+
+            animationRef.current = requestAnimationFrame(animate);
+          };
+
+          animate();
+
+          // Listen for AQI updates via URL
+          const checkAQIUpdate = () => {
+            const newAQI = getAQIFromURL();
+            if (newAQI !== aqi) {
+              setAqi(newAQI);
+            }
+          };
+
+          const intervalId = setInterval(checkAQIUpdate, 1000);
+
+          return () => {
+            if (animationRef.current) {
+              cancelAnimationFrame(animationRef.current);
+            }
+            clearInterval(intervalId);
+          };
+        }, [aqi]);
+
+        return React.createElement(
+          "div",
+          { className: "w-full p-4 max-w-lg mx-auto space-y-4" },
+          // AQI 值和狀態顯示
+          React.createElement(
+            "div",
+            { className: "flex items-center justify-between" },
+            React.createElement(
+              "span",
+              { className: "text-lg font-medium" },
+              "AQI 值: " + aqi
+            ),
+            React.createElement(
+              "span",
+              {
+                className: "text-sm",
+                style: { color: getAQIColor(aqi) },
+              },
+              getAQIStatus(aqi)
+            )
+          ),
+
+          // 滑桿
+          React.createElement("input", {
+            type: "range",
+            min: "0",
+            max: "500",
+            value: aqi,
+            onChange: (e) => setAqi(Number(e.target.value)),
+            className:
+              "w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer",
+          }),
+
+          // Canvas
+          React.createElement("canvas", {
+            ref: canvasRef,
+            width: 400,
+            height: 300,
+            className:
+              "w-full border border-gray-200 rounded-lg bg-white shadow-md",
+          })
+        );
+      };
+
+      ReactDOM.render(
+        React.createElement(AirFlowDance),
+        document.getElementById("root")
+      );
+    </script>
+  </body>
+</html>
