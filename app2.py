@@ -72,6 +72,7 @@ def aqi_route():
 @app.route('/visualization')
 def visualization():
     html_content = """
+
 <!DOCTYPE html>
 <html>
 <head>
@@ -80,8 +81,61 @@ def visualization():
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        .slider-container {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 400px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .aqi-display {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 15px 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            min-width: 200px;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: #e2e8f0;
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #4a5568;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            background: #2d3748;
+        }
+    </style>
 </head>
-<body style="margin:0; padding:0;">
+<body style="margin:0; padding:0; overflow: hidden;">
     <div id="root"></div>
     <script>
         function getAQIFromURL() {
@@ -115,6 +169,10 @@ def visualization():
             React.useEffect(() => {
                 const canvas = canvasRef.current;
                 if (!canvas) return;
+
+                // 設置 canvas 為全螢幕
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
 
                 const ctx = canvas.getContext('2d');
                 if (!ctx) return;
@@ -194,51 +252,58 @@ def visualization():
                 
                 const intervalId = setInterval(checkAQIUpdate, 1000);
 
+                // 處理視窗大小變化
+                const handleResize = () => {
+                    canvas.width = window.innerWidth;
+                    canvas.height = window.innerHeight;
+                };
+                window.addEventListener('resize', handleResize);
+
                 return () => {
                     if (animationRef.current) {
                         cancelAnimationFrame(animationRef.current);
                     }
                     clearInterval(intervalId);
+                    window.removeEventListener('resize', handleResize);
                 };
             }, [aqi]);
 
-            return React.createElement('div', { 
-                className: 'w-full h-screen flex flex-col items-center justify-center p-4',
-                style: { maxWidth: '100vw', margin: '0 auto' }
-            },
+            return React.createElement('div', { className: 'relative w-full h-screen' },
+                // Canvas 背景
+                React.createElement('canvas', {
+                    ref: canvasRef,
+                    className: 'absolute top-0 left-0 w-full h-full'
+                }),
+                
+                // AQI 顯示區
                 React.createElement('div', { 
-                    className: 'w-full max-w-lg space-y-4'
+                    className: 'aqi-display'
                 },
                     React.createElement('div', { 
-                        className: 'flex items-center justify-between bg-white p-2 rounded-lg shadow'
-                    },
-                        React.createElement('span', { 
-                            className: 'text-lg font-medium'
-                        }, 
-                            'AQI 值: ' + aqi
-                        ),
-                        React.createElement('span', { 
-                            className: 'text-sm',
-                            style: { color: getAQIColor(aqi) }
-                        }, 
-                            getAQIStatus(aqi)
-                        )
+                        className: 'text-4xl font-bold mb-2',
+                        style: { color: getAQIColor(aqi) }
+                    }, 
+                        'AQI: ' + aqi
                     ),
-                    
+                    React.createElement('div', { 
+                        className: 'text-xl',
+                        style: { color: getAQIColor(aqi) }
+                    }, 
+                        getAQIStatus(aqi)
+                    )
+                ),
+                
+                // 滑桿控制區
+                React.createElement('div', { 
+                    className: 'slider-container'
+                },
                     React.createElement('input', {
                         type: 'range',
                         min: '0',
                         max: '500',
                         value: aqi,
                         onChange: (e) => setAqi(Number(e.target.value)),
-                        className: 'w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer'
-                    }),
-                    
-                    React.createElement('canvas', {
-                        ref: canvasRef,
-                        width: 400,
-                        height: 300,
-                        className: 'w-full border border-gray-200 rounded-lg bg-white shadow-md'
+                        className: 'w-full'
                     })
                 )
             );
