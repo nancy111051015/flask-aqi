@@ -1,6 +1,8 @@
-from flask import Flask, jsonify, request
+import os
 import requests
 import math
+from flask import Flask, jsonify, request
+
 
 app = Flask(__name__)
 
@@ -45,6 +47,15 @@ def get_nearest_aqi(lat, lon):
             return {"error": f"無法取得資料，狀態碼：{response.status_code}"}
     except requests.exceptions.RequestException as e:
         return {"error": f"連線錯誤：{e}"}
+
+@app.errorhandler(500)
+def internal_server_error(error):
+    app.logger.error(f'Server Error: {error}')
+    return jsonify(error=str(error)), 500
+
+@app.route('/health')
+def health_check():
+    return jsonify(status='healthy'), 200
 
 @app.route('/aqi', methods=['GET'])
 def aqi_route():
@@ -253,6 +264,9 @@ def home():
         <li>視覺化: /visualization?aqi=AQI值</li>
     </ul>
     '''
+    
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    # 使用環境變數或默認值
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
