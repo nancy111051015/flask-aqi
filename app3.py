@@ -2,6 +2,7 @@ import os
 import requests
 import math
 import random
+from flask import render_template, Response
 from flask import Flask, jsonify, request, send_from_directory
 try:
     from PIL import Image
@@ -266,6 +267,27 @@ def app_inventor_endpoint():
             'status': 'error',
             'message': str(e)
         })
+
+@app.route('/visualization', methods=['GET'])
+def visualization():
+    """返回視覺化模板內容"""
+    style = request.args.get('style')
+    aqi = request.args.get('aqi', type=int)
+    
+    if style not in VISUALIZATIONS:
+        return jsonify({'error': '未知的視覺化風格'}), 400
+    if aqi is None:
+        return jsonify({'error': '缺少AQI值'}), 400
+    
+    viz_info = VISUALIZATIONS[style]
+    template_path = os.path.join('templates', viz_info['template'])
+    
+    try:
+        # 渲染模板並傳遞 AQI 值作為參數
+        return render_template(viz_info['template'], aqi=aqi)
+    except FileNotFoundError:
+        return jsonify({'error': f'模板文件 {style} 不存在'}), 404
+
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
