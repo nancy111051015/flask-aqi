@@ -3,7 +3,13 @@ import requests
 import math
 import random
 from flask import Flask, jsonify, request, send_from_directory
-from PIL import Image
+try:
+    from PIL import Image
+except ImportError:
+    print("Unable to import PIL. Installing Pillow...")
+    import subprocess
+    subprocess.check_call(["pip", "install", "Pillow"])
+    from PIL import Image
 import numpy as np
 import io
 from sklearn.cluster import KMeans
