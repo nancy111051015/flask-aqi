@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Black Hole</title>
+    <meta charset="UTF-8">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { 
+            margin: 0; 
+            padding: 0; 
+            overflow: hidden;
+            background: #000;
+            font-family: Arial, sans-serif;
+        }
+        .controls {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            z-index: 1000;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            width: 80%;
+            max-width: 400px;
+        }
+        .aqi-display {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            text-align: center;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 25px;
+            border-radius: 50%;
+            backdrop-filter: blur(10px);
+            width: 120px;
+            height: 120px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 0 50px rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+        }
+        .aqi-value {
+            font-size: 48px;
+            font-weight: bold;
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+            margin-bottom: 5px;
+            line-height: 1;
+        }
+        .aqi-status {
+            font-size: 18px;
+            opacity: 0.9;
+        }
+        .slider {
+            width: 100%;
+            height: 8px;
+            -webkit-appearance: none;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            outline: none;
+        }
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: white;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script>
+        function getAQIColor(value) {
+            if (value <= 50) return 'rgba(0, 232, 0, 0.8)';
+            if (value <= 100) return 'rgba(255, 215, 0, 0.8)';
+            if (value <= 150) return 'rgba(255, 126, 0, 0.8)';
+            if (value <= 200) return 'rgba(255, 0, 0, 0.8)';
+            if (value <= 300) return 'rgba(153, 0, 76, 0.8)';
+            return 'rgba(126, 0, 35, 0.8)';
+        }
+
+        function getAQIStatus(value) {
+            if (value <= 50) return '良好';
+            if (value <= 100) return '普通';
+            if (value <= 150) return '輕度污染';
+            if (value <= 200) return '中度污染';
+            if (value <= 300) return '重度污染';
+            return '嚴重污染';
+        }
+
+        function Star(x, y) {
+            this.x = x;
+            this.y = y;
+            this.size = Math.random() * 2;
+            this.flickerSpeed = Math.random() * 0.05;
+            this.angle = Math.random() * Math.PI * 2;
+            this.opacity = Math.random() * 0.5 + 0.5;
+        }
+
+        Star.prototype.update = function() {
+            this.opacity = 0.5 + Math.sin(this.angle) * 0.3;
+            this.angle += this.flickerSpeed;
+        };
+
+        Star.prototype.draw = function(ctx) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(255, 255, 255, ${this.opacity})`;
+            ctx.fill();
+        };
+
+        function Spiral(x, y, aqi) {
+            this.x = x;
+            this.y = y;
+            this.angle = Math.random() * Math.PI * 2;
+            this.radius = 0;
+            this.baseSpeed = 0.08;
+            this.speed = this.baseSpeed;
+            this.radiusGrowth = 0.8;
+            this.size = Math.random() * 3 + 2;
+            this.opacity = 1;
+            this.color = getAQIColor(aqi);
+            this.lifetime = 0;
+            this.maxLifetime = 250;
+            this.spiralTightness = 0.15 + (Math.random() * 0.1);
+            this.wobble = {
+                amplitude: Math.random() * 8,
+                frequency: Math.random() * 0.15,
+                phase: Math.random() * Math.PI * 2
+            };
+        }
+
+        Spiral.prototype.update = function(center, aqi) {
+            var speedMultiplier;
+            if (aqi <= 50) {
+                speedMultiplier = 1 + (aqi/200);
+            } else if (aqi <= 100) {
+                speedMultiplier = 1.25 + (aqi/150);
+            } else {
+                speedMultiplier = 1.5 + (aqi/100);
+            }
+            
+            this.speed = this.baseSpeed * speedMultiplier;
+            this.angle += this.speed;
+            
+            var radiusMultiplier = 1 + (aqi/300);
+            this.radius += this.radiusGrowth * radiusMultiplier;
+            
+            this.lifetime += 1;
+            
+            if (this.lifetime > this.maxLifetime * 0.7) {
+                this.opacity = 1 - ((this.lifetime - this.maxLifetime * 0.7) / (this.maxLifetime * 0.3));
+            }
+
+            var wobbleOffset = Math.sin(this.lifetime * this.wobble.frequency + this.wobble.phase) * this.wobble.amplitude;
+            
+            this.x = center.x + (this.radius + wobbleOffset) * Math.cos(this.angle * this.spiralTightness);
+            this.y = center.y + (this.radius + wobbleOffset) * Math.sin(this.angle * this.spiralTightness);
+            
+            return this.lifetime < this.maxLifetime;
+        };
+
+        Spiral.prototype.draw = function(ctx) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            ctx.fillStyle = this.color;
+            ctx.globalAlpha = this.opacity;
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        };
+
+        function App() {
+            var canvasRef = React.useRef(null);
+            var spirals = React.useRef([]);
+            var stars = React.useRef([]);
+            var animationRef = React.useRef(null);
+            var [currentAqi, setCurrentAqi] = React.useState(
+                parseInt(new URLSearchParams(window.location.search).get('aqi')) || 50
+            );
+
+            React.useEffect(function() {
+                var canvas = canvasRef.current;
+                var ctx = canvas.getContext('2d');
+                
+                function resizeCanvas() {
+                    canvas.width = window.innerWidth;
+                    canvas.height = window.innerHeight;
+                    initStars();
+                }
+                
+                function initStars() {
+                    stars.current = [];
+                    var maxStars = 300;
+                    var starCount = Math.max(50, Math.floor(maxStars * (1 - currentAqi/500)));
+                    for (var i = 0; i < starCount; i++) {
+                        stars.current.push(new Star(
+                            Math.random() * canvas.width,
+                            Math.random() * canvas.height
+                        ));
+                    }
+                }
+
+                resizeCanvas();
+                window.addEventListener('resize', resizeCanvas);
+
+                var center = {
+                    x: canvas.width / 2,
+                    y: canvas.height / 2
+                };
+
+                function animate() {
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                    stars.current.forEach(function(star) {
+                        star.update();
+                        star.draw(ctx);
+                    });
+
+                    var spawnCount;
+                    if (currentAqi <= 50) {
+                        spawnCount = 2;
+                    } else if (currentAqi <= 100) {
+                        spawnCount = Math.floor(currentAqi / 45);
+                    } else {
+                        spawnCount = Math.floor(currentAqi / 40);
+                    }
+
+                    for (var i = 0; i < spawnCount; i++) {
+                        if (Math.random() < 0.12) {
+                            spirals.current.push(new Spiral(center.x, center.y, currentAqi));
+                        }
+                    }
+
+                    spirals.current = spirals.current.filter(function(spiral) {
+                        var alive = spiral.update(center, currentAqi);
+                        if (alive) {
+                            spiral.draw(ctx);
+                        }
+                        return alive;
+                    });
+
+                    var gradient = ctx.createRadialGradient(
+                        center.x, center.y, 0,
+                        center.x, center.y, 150
+                    );
+                    var color = getAQIColor(currentAqi);
+                    gradient.addColorStop(0, color.replace('0.8', '0.4'));
+                    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                    ctx.fillStyle = gradient;
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                    animationRef.current = requestAnimationFrame(animate);
+                }
+
+                animate();
+
+                return function() {
+                    window.removeEventListener('resize', resizeCanvas);
+                    if (animationRef.current) {
+                        cancelAnimationFrame(animationRef.current);
+                    }
+                };
+            }, [currentAqi]);
+
+            function handleAqiChange(event) {
+                setCurrentAqi(Number(event.target.value));
+            }
+
+            var aqiColor = getAQIColor(currentAqi).replace('0.8', '1');
+
+            return React.createElement('div', null,
+                React.createElement('canvas', {
+                    ref: canvasRef,
+                    style: {
+                        position: 'fixed',
+                        top: 0,
+                        left: 0
+                    }
+                }),
+                React.createElement('div', {
+                    className: 'aqi-display',
+                    style: {
+                        boxShadow: `0 0 30px ${aqiColor}`,
+                        border: `2px solid ${aqiColor}`
+                    }
+                }, 
+                    React.createElement('div', {
+                        className: 'aqi-value',
+                        style: { color: aqiColor }
+                    }, currentAqi),
+                    React.createElement('div', {
+                        className: 'aqi-status'
+                    }, getAQIStatus(currentAqi))
+                ),
+                React.createElement('div', {
+                    className: 'controls'
+                },
+                    React.createElement('input', {
+                        type: 'range',
+                        min: '0',
+                        max: '500',
+                        value: currentAqi,
+                        onChange: handleAqiChange,
+                        className: 'slider'
+                    })
+                )
+            );
+        }
+
+        var rootElement = document.getElementById('root');
+        ReactDOM.render(React.createElement(App), rootElement);
+    </script>
+</body>
+</html>

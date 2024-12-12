@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Wave Pattern Visualization</title>
+    <meta charset="UTF-8">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { 
+            margin: 0; 
+            padding: 0; 
+            overflow: hidden;
+            background: #000;
+            font-family: Arial, sans-serif;
+        }
+        .controls {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            z-index: 1000;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            width: 80%;
+            max-width: 400px;
+        }
+        .slider {
+            width: 100%;
+            height: 8px;
+            -webkit-appearance: none;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            outline: none;
+            margin: 10px 0;
+        }
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: white;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
+        }
+        .slider::-webkit-slider-thumb:hover {
+            transform: scale(1.1);
+        }
+        .aqi-display {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            text-align: center;
+            z-index: 1000;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+            background: rgba(0, 0, 0, 0.5);
+            padding: 20px 40px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+        .aqi-value {
+            font-size: 72px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+        }
+        .aqi-status {
+            font-size: 24px;
+            opacity: 0.9;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        .aqi-border {
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            border-radius: 20px;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script>
+        function getAQIColor(value) {
+            if (value <= 50) return 'rgba(0, 232, 0, 0.8)';
+            if (value <= 100) return 'rgba(255, 215, 0, 0.8)';
+            if (value <= 150) return 'rgba(255, 126, 0, 0.8)';
+            if (value <= 200) return 'rgba(255, 0, 0, 0.8)';
+            if (value <= 300) return 'rgba(153, 0, 76, 0.8)';
+            return 'rgba(126, 0, 35, 0.8)';
+        }
+
+        function getAQIStatus(value) {
+            if (value <= 50) return '良好';
+            if (value <= 100) return '普通';
+            if (value <= 150) return '輕度污染';
+            if (value <= 200) return '中度污染';
+            if (value <= 300) return '重度污染';
+            return '嚴重污染';
+        }
+
+        function Wave(config) {
+            this.frequency = config.frequency;
+            this.amplitude = config.amplitude;
+            this.phase = config.phase;
+            this.baseSpeed = config.speed;
+            this.speed = config.speed;
+            this.color = config.color;
+            this.opacity = config.opacity;
+            this.yOffset = config.yOffset || 0;
+            this.noise = 0;
+            this.noiseStep = Math.random() * 0.02;
+        }
+
+        Wave.prototype.updateSpeed = function(aqi) {
+            // AQI 值越高，波動速度越快
+            var speedMultiplier = 1 + (aqi / 100);
+            this.speed = this.baseSpeed * speedMultiplier;
+        };
+
+        Wave.prototype.update = function() {
+            this.phase += this.speed;
+            this.noise += this.noiseStep;
+            this.yOffset = Math.sin(this.noise) * 20;
+        };
+
+        Wave.prototype.draw = function(ctx, width, height) {
+            ctx.beginPath();
+            ctx.moveTo(0, height / 2);
+            
+            for (var x = 0; x <= width; x += 1) {
+                var y = height/2 + 
+                    Math.sin(x * this.frequency + this.phase) * this.amplitude +
+                    Math.sin(x * this.frequency * 2 + this.phase * 1.5) * (this.amplitude * 0.3) +
+                    Math.sin(x * this.frequency * 0.5 + this.phase * 0.7) * (this.amplitude * 0.4) +
+                    this.yOffset;
+                
+                ctx.lineTo(x, y);
+            }
+
+            var gradient = ctx.createLinearGradient(0, 0, width, 0);
+            gradient.addColorStop(0, this.color);
+            gradient.addColorStop(0.5, this.color.replace('0.8', '0.9'));
+            gradient.addColorStop(1, this.color);
+            
+            ctx.strokeStyle = gradient;
+            ctx.lineWidth = 2;
+            ctx.globalAlpha = this.opacity;
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+        };
+
+        function App() {
+            var canvasRef = React.useRef(null);
+            var waves = React.useRef([]);
+            var animationRef = React.useRef(null);
+            var [currentAqi, setCurrentAqi] = React.useState(
+                parseInt(new URLSearchParams(window.location.search).get('aqi')) || 50
+            );
+
+            function initWaves(aqi) {
+                var waveCount = Math.min(Math.floor(aqi / 30) + 3, 8);
+                var baseColor = getAQIColor(aqi);
+                waves.current = [];
+
+                for (var i = 0; i < waveCount; i++) {
+                    waves.current.push(new Wave({
+                        frequency: 0.01 + (Math.random() * 0.01),
+                        amplitude: 40 - (i * 3) + (Math.random() * 10),
+                        phase: i * Math.PI / 3 + (Math.random() * Math.PI),
+                        speed: 0.01 + (Math.random() * 0.01),
+                        color: baseColor,
+                        opacity: 1 - (i * 0.1),
+                        yOffset: Math.random() * 20 - 10
+                    }));
+                }
+            }
+
+            React.useEffect(function() {
+                var canvas = canvasRef.current;
+                var ctx = canvas.getContext('2d');
+                
+                function resizeCanvas() {
+                    canvas.width = window.innerWidth;
+                    canvas.height = window.innerHeight;
+                }
+                
+                resizeCanvas();
+                window.addEventListener('resize', resizeCanvas);
+
+                initWaves(currentAqi);
+
+                function animate() {
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                    waves.current.forEach(function(wave) {
+                        wave.updateSpeed(currentAqi);
+                        wave.update();
+                        wave.draw(ctx, canvas.width, canvas.height);
+                    });
+
+                    animationRef.current = requestAnimationFrame(animate);
+                }
+
+                animate();
+
+                return function() {
+                    window.removeEventListener('resize', resizeCanvas);
+                    if (animationRef.current) {
+                        cancelAnimationFrame(animationRef.current);
+                    }
+                };
+            }, [currentAqi]);
+
+            function handleAqiChange(event) {
+                var newAqi = Number(event.target.value);
+                setCurrentAqi(newAqi);
+                initWaves(newAqi);
+            }
+
+            var aqiColor = getAQIColor(currentAqi).replace('0.8', '1');
+
+            return React.createElement('div', null,
+                React.createElement('canvas', {
+                    ref: canvasRef,
+                    style: {
+                        position: 'fixed',
+                        top: 0,
+                        left: 0
+                    }
+                }),
+                React.createElement('div', {
+                    className: 'aqi-display',
+                    style: {
+                        boxShadow: `0 0 30px ${aqiColor}`
+                    }
+                }, 
+                    React.createElement('div', {
+                        className: 'aqi-border',
+                        style: {
+                            border: `2px solid ${aqiColor}`
+                        }
+                    }),
+                    React.createElement('div', {
+                        className: 'aqi-value',
+                        style: {
+                            color: aqiColor
+                        }
+                    }, currentAqi),
+                    React.createElement('div', {
+                        className: 'aqi-status'
+                    }, getAQIStatus(currentAqi))
+                ),
+                React.createElement('div', {
+                    className: 'controls'
+                },
+                    React.createElement('input', {
+                        type: 'range',
+                        min: '0',
+                        max: '500',
+                        value: currentAqi,
+                        onChange: handleAqiChange,
+                        className: 'slider'
+                    })
+                )
+            );
+        }
+
+        var rootElement = document.getElementById('root');
+        ReactDOM.render(React.createElement(App), rootElement);
+    </script>
+</body>
+</html>
