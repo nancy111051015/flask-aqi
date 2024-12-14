@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Galaxy1 Visualization</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+    <style>
+        body { 
+            margin: 0; 
+            padding: 0; 
+            overflow: hidden;
+            background: #000;
+            font-family: Arial, sans-serif;
+        }
+        .controls {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(8px);
+            padding: 20px;
+            border-radius: 15px;
+            z-index: 1000;
+            width: 80%;
+            max-width: 400px;
+        }
+        .aqi-display {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(8px);
+            padding: 25px;
+            border-radius: 10px;
+            color: white;
+            text-align: center;
+        }
+        #aqi-slider {
+            width: 100%;
+            height: 8px;
+            -webkit-appearance: none;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            outline: none;
+        }
+        #aqi-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: white;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="cosmicCanvas"></canvas>
+    <div class="aqi-display">
+        <div id="aqiValue" style="font-size: 48px; font-weight: bold;">Loading...</div>
+        <div id="aqiStatus">Loading...</div>
+    </div>
+    <div class="controls">
+        <input type="range" id="aqi-slider" min="0" max="500" value="50">
+    </div>
+
+    <script>
+        // 從 Flask 獲取初始 AQI 值
+        const initialAqi = parseInt('{{aqi|safe}}') || 50;
+        
+        const canvas = document.getElementById('cosmicCanvas');
+        const ctx = canvas.getContext('2d');
+        const simplex = new SimplexNoise();
+        let orbits = [];
+        let particles = [];
+        let time = 0;
+
+        // 設置畫布大小
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // AQI相關函數
+        function getAQIColor(value) {
+            if (value <= 50) return { main: '#00ff00', accent: '#80ff80' };     // 綠色
+            if (value <= 100) return { main: '#ffff00', accent: '#ffff80' };    // 黃色
+            if (value <= 150) return { main: '#ff9900', accent: '#ffb366' };    // 橙色
+            if (value <= 200) return { main: '#ff0000', accent: '#ff6666' };    // 紅色
+            if (value <= 300) return { main: '#9900cc', accent: '#b366cc' };    // 紫色
+            return { main: '#660033', accent: '#993366' };                      // 暗紅色
+        }
+
+        function getAQIStatus(value) {
+            if (value <= 50) return '良好';
+            if (value <= 100) return '普通';
+            if (value <= 150) return '輕度污染';
+            if (value <= 200) return '中度污染';
+            if (value <= 300) return '重度污染';
+            return '嚴重污染';
+        }
+
+        // 軌道類
+        class Orbit {
+            constructor(config) {
+                this.radius = config.radius;
+                this.angle = Math.random() * Math.PI * 2;
+                this.speed = config.speed;
+                this.rotationX = config.rotationX;
+                this.rotationY = config.rotationY;
+                this.color = config.color;
+                this.width = config.width || 1;
+                this.noiseOffset = Math.random() * 1000;
+                this.particleCount = config.particleCount || 0;
+                this.particles = [];
+                this.createParticles();
+            }
+
+            createParticles() {
+                for (let i = 0; i < this.particleCount; i++) {
+                    this.particles.push({
+                        angle: (i / this.particleCount) * Math.PI * 2,
+                        size: Math.random() * 2 + 1,
+                        offset: Math.random() * 0.2
+                    });
+                }
+            }
+
+            update(aqi) {
+                const intensity = aqi / 100;
+                const noise = simplex.noise2D(this.noiseOffset, time * 0.001) * 0.5;
+                this.angle += (this.speed + noise * intensity) * (1 + intensity * 0.5);
+                this.noiseOffset += 0.01;
+
+                this.particles.forEach(particle => {
+                    particle.angle += this.speed * (1 + particle.offset + intensity * 0.5);
+                });
+            }
+
+            draw(ctx, centerX, centerY, aqi) {
+                const intensity = aqi / 100;
+                ctx.save();
+                ctx.translate(centerX, centerY);
+                ctx.rotate(this.rotationX);
+                ctx.scale(1, Math.sin(this.rotationY));
+
+                ctx.beginPath();
+                ctx.ellipse(0, 0, this.radius, this.radius * Math.abs(Math.sin(this.rotationY)), 
+                           0, 0, Math.PI * 2);
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = this.width;
+                ctx.globalAlpha = Math.max(0.1, 1 - intensity * 0.5);
+                ctx.stroke();
+
+                this.particles.forEach(particle => {
+                    const noise = simplex.noise2D(particle.angle, time * 0.001) * 10 * intensity;
+                    const radius = this.radius + noise;
+                    const x = Math.cos(particle.angle) * radius;
+                    const y = Math.sin(particle.angle) * radius * Math.abs(Math.sin(this.rotationY));
+
+                    ctx.beginPath();
+                    ctx.arc(x, y, particle.size, 0, Math.PI * 2);
+                    ctx.fillStyle = this.color;
+                    ctx.globalAlpha = Math.max(0.2, 1 - intensity * 0.3);
+                    ctx.fill();
+
+                    ctx.shadowColor = this.color;
+                    ctx.shadowBlur = 10;
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                });
+
+                ctx.restore();
+            }
+        }
+
+        // 漂浮粒子類
+        class FloatingParticle {
+            constructor() {
+                this.reset();
+            }
+
+            reset() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.size = Math.random() * 2 + 0.5;
+                this.speedX = (Math.random() - 0.5) * 0.5;
+                this.speedY = (Math.random() - 0.5) * 0.5;
+                this.life = 1;
+            }
+
+            update(aqi) {
+                const intensity = aqi / 100;
+                this.x += this.speedX * (1 + intensity);
+                this.y += this.speedY * (1 + intensity);
+                this.life -= 0.005;
+
+                if (this.life <= 0 || this.x < 0 || this.x > canvas.width || 
+                    this.y < 0 || this.y > canvas.height) {
+                    this.reset();
+                }
+            }
+
+            draw(ctx, color) {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = color;
+                ctx.globalAlpha = this.life * 0.5;
+                ctx.fill();
+            }
+        }
+
+        // 初始化系統
+        function initializeSystem() {
+            orbits = [];
+            particles = [];
+
+            for (let i = 0; i < 12; i++) {
+                orbits.push(new Orbit({
+                    radius: 50 + i * 20,
+                    speed: (0.002 / (i + 1)) * (Math.random() * 0.5 + 0.75),
+                    rotationX: Math.random() * Math.PI * 2,
+                    rotationY: Math.random() * Math.PI,
+                    color: '#ffffff',
+                    width: Math.random() * 1 + 0.5,
+                    particleCount: Math.floor(Math.random() * 10) + 5
+                }));
+            }
+
+            for (let i = 0; i < 100; i++) {
+                particles.push(new FloatingParticle());
+            }
+        }
+
+        // 初始化界面
+        function initializeUI() {
+            document.getElementById('aqi-slider').value = initialAqi;
+            document.getElementById('aqiValue').textContent = initialAqi;
+            const colors = getAQIColor(initialAqi);
+            document.getElementById('aqiValue').style.color = colors.main;
+            document.getElementById('aqiStatus').textContent = getAQIStatus(initialAqi);
+        }
+
+        // 動畫循環
+        function animate() {
+            const aqi = parseInt(document.getElementById('aqi-slider').value);
+            const colors = getAQIColor(aqi);
+            
+            document.getElementById('aqiValue').textContent = aqi;
+            document.getElementById('aqiStatus').textContent = getAQIStatus(aqi);
+            document.getElementById('aqiValue').style.color = colors.main;
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+
+            particles.forEach(particle => {
+                particle.update(aqi);
+                particle.draw(ctx, colors.accent);
+            });
+
+            orbits.forEach(orbit => {
+                orbit.color = colors.main;
+                orbit.update(aqi);
+                orbit.draw(ctx, centerX, centerY, aqi);
+            });
+
+            const gradient = ctx.createRadialGradient(
+                centerX, centerY, 0,
+                centerX, centerY, 100
+            );
+            gradient.addColorStop(0, colors.main + '66');
+            gradient.addColorStop(1, 'transparent');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            time++;
+            requestAnimationFrame(animate);
+        }
+
+        // 自動更新 AQI 值
+        function checkAQIUpdate() {
+            fetch(window.location.href)
+                .then(response => response.text())
+                .then(html => {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    const newAqi = parseInt(doc.querySelector('#aqiValue').textContent);
+                    if (!isNaN(newAqi) && newAqi !== parseInt(document.getElementById('aqiValue').textContent)) {
+                        document.getElementById('aqi-slider').value = newAqi;
+                        document.getElementById('aqiValue').textContent = newAqi;
+                        const colors = getAQIColor(newAqi);
+                        document.getElementById('aqiValue').style.color = colors.main;
+                        document.getElementById('aqiStatus').textContent = getAQIStatus(newAqi);
+                        initializeSystem();
+                    }
+                })
+                .catch(console.error);
+        }
+
+        // 每分鐘檢查一次更新
+        setInterval(checkAQIUpdate, 60000);
+
+        // 事件監聽器
+        document.getElementById('aqi-slider').addEventListener('input', function(e) {
+            const aqi = parseInt(e.target.value);
+            const colors = getAQIColor(aqi);
+            document.getElementById('aqiValue').style.color = colors.main;
+        });
+
+        // 初始化和啟動
+        initializeUI();
+        initializeSystem();
+        animate();
+    </script>
+</body>
+</html>

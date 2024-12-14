@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Ocean Visualization</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { 
+            margin: 0; 
+            padding: 0; 
+            overflow: hidden;
+            background: #000;
+            font-family: Arial, sans-serif;
+        }
+
+        #visualizer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        .controls {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(8px);
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            z-index: 1000;
+            width: 80%;
+            max-width: 400px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        #aqi-slider {
+            width: 100%;
+            height: 8px;
+            -webkit-appearance: none;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            outline: none;
+        }
+
+        #aqi-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        #aqi-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.1);
+        }
+
+        .aqi-display {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(8px);
+            padding: 25px;
+            border-radius: 10px;
+            color: white;
+            text-align: center;
+            min-width: 200px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .aqi-value {
+            font-size: 48px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .aqi-status {
+            font-size: 18px;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div id="visualizer">
+        <canvas id="waveCanvas"></canvas>
+    </div>
+
+    <div class="aqi-display">
+        <div id="aqiValue" class="aqi-value">Loading...</div>
+        <div id="aqiStatus" class="aqi-status">Loading...</div>
+    </div>
+
+    <div class="controls">
+        <input type="range" id="aqi-slider" min="0" max="500" value="50">
+    </div>
+
+    <script>
+        // 初始AQI值
+        const initialAqi = parseInt('{{aqi|safe}}') || 50;
+        
+        const canvas = document.getElementById('waveCanvas');
+        const ctx = canvas.getContext('2d');
+        let animationId = null;
+        let waveTime = 0;
+        let lines = [];
+
+        function getAQIColor(value) {
+            if (value <= 50) return '#00ff00';
+            if (value <= 100) return '#ffff00';
+            if (value <= 150) return '#ff9900';
+            if (value <= 200) return '#ff3333';
+            if (value <= 300) return '#cc0066';
+            return '#990033';
+        }
+
+        function getAQIStatus(value) {
+            if (value <= 50) return '良好';
+            if (value <= 100) return '普通';
+            if (value <= 150) return '輕度污染';
+            if (value <= 200) return '中度污染';
+            if (value <= 300) return '重度污染';
+            return '嚴重污染';
+        }
+
+        class WaveLine {
+            constructor(canvas, index, totalLines) {
+                this.canvas = canvas;
+                this.index = index;
+                this.totalLines = totalLines;
+                this.reset();
+            }
+
+            reset() {
+                this.points = [];
+                this.phase = Math.random() * Math.PI * 2;
+                this.frequency = 0.02 - (this.index / this.totalLines) * 0.015;
+                this.amplitude = 15 + (this.index / this.totalLines) * 30;
+                this.speed = 0.02 - (this.index / this.totalLines) * 0.015;
+                this.lineWidth = 0.5;
+                this.dashOffset = 0;
+                this.baseOpacity = 0.3 - (this.index / this.totalLines) * 0.2;
+                this.opacity = this.baseOpacity;
+                this.verticalOffset = (this.index / this.totalLines) * (this.canvas.height * 0.4);
+                this.noiseOffset = Math.random() * 1000;
+                this.noiseSpeed = 0.001;
+                this.waveOffset = Math.random() * Math.PI * 2;
+            }
+
+            noise(x, y) {
+                return Math.sin(x * 0.1 + y * 0.1) * 0.5 + 0.5;
+            }
+
+            update(aqi, waveTime) {
+                const intensity = Math.min(aqi / 100, 2.5);
+                this.phase += this.speed * intensity;
+                this.noiseOffset += this.noiseSpeed;
+                this.dashOffset -= 1;
+
+                const waveIntensity = (Math.sin(waveTime + this.waveOffset) + 1) * 0.5;
+                this.opacity = this.baseOpacity * (0.5 + waveIntensity * 0.8);
+                
+                this.points = [];
+                const steps = Math.floor(this.canvas.width / 2);
+                for (let i = 0; i <= steps; i++) {
+                    const x = (i / steps) * this.canvas.width;
+                    const normalY = this.canvas.height * 0.5 + this.verticalOffset;
+                    
+                    let y = normalY;
+                    y += Math.sin(x * this.frequency + this.phase) * 
+                         this.amplitude * intensity * (0.8 + waveIntensity * 0.4);
+                    y += Math.sin(x * this.frequency * 2 + this.phase * 1.5) * 
+                         (this.amplitude * 0.3) * waveIntensity;
+                    y += Math.sin(x * this.frequency * 0.5 + this.phase * 0.7) * 
+                         (this.amplitude * 0.4);
+                    
+                    const noiseValue = this.noise(x, this.phase * 100) * 
+                                     10 * intensity * waveIntensity;
+                    y += noiseValue;
+
+                    this.points.push({ x, y });
+                }
+            }
+
+            draw(ctx, color) {
+                if (this.points.length < 2) return;
+
+                ctx.beginPath();
+                ctx.moveTo(this.points[0].x, this.points[0].y);
+                
+                for (let i = 1; i < this.points.length - 2; i++) {
+                    const xc = (this.points[i].x + this.points[i + 1].x) / 2;
+                    const yc = (this.points[i].y + this.points[i + 1].y) / 2;
+                    ctx.quadraticCurveTo(this.points[i].x, this.points[i].y, xc, yc);
+                }
+                
+                ctx.strokeStyle = color.replace(')', `, ${this.opacity})`).replace('rgb', 'rgba');
+                ctx.lineWidth = this.lineWidth;
+                ctx.setLineDash([4, 4]);
+                ctx.lineDashOffset = this.dashOffset;
+                ctx.stroke();
+
+                ctx.shadowColor = color;
+                ctx.shadowBlur = 3;
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+            }
+        }
+
+        function initializeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            updateLines();
+        }
+
+        function updateLines() {
+            const aqi = parseInt(document.getElementById('aqi-slider').value);
+            const baseLines = 15;
+            const maxLines = 50;
+            const totalLines = Math.min(baseLines + Math.floor(aqi / 10), maxLines);
+            
+            lines = Array(totalLines).fill(null).map((_, i) => new WaveLine(canvas, i, totalLines));
+        }
+
+        function animate() {
+            const aqi = parseInt(document.getElementById('aqi-slider').value);
+            const color = getAQIColor(aqi);
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            waveTime += 0.02;
+
+            lines.forEach(line => {
+                line.update(aqi, waveTime);
+                line.draw(ctx, color);
+            });
+
+            const glow = ctx.createRadialGradient(
+                canvas.width / 2, canvas.height * 0.5, 0,
+                canvas.width / 2, canvas.height * 0.5, canvas.width * 0.3
+            );
+            glow.addColorStop(0, `${color}11`);
+            glow.addColorStop(1, 'transparent');
+            ctx.fillStyle = glow;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            animationId = requestAnimationFrame(animate);
+        }
+
+        // 初始化界面
+        function initializeUI() {
+            document.getElementById('aqi-slider').value = initialAqi;
+            document.getElementById('aqiValue').textContent = initialAqi;
+            document.getElementById('aqiValue').style.color = getAQIColor(initialAqi);
+            document.getElementById('aqiStatus').textContent = getAQIStatus(initialAqi);
+        }
+
+        // 事件監聽器
+        window.addEventListener('resize', initializeCanvas);
+
+        document.getElementById('aqi-slider').addEventListener('input', function(e) {
+            const aqi = parseInt(e.target.value);
+            document.getElementById('aqiValue').textContent = aqi;
+            document.getElementById('aqiValue').style.color = getAQIColor(aqi);
+            document.getElementById('aqiStatus').textContent = getAQIStatus(aqi);
+            updateLines();
+        });
+
+        // 初始化和啟動
+        initializeUI();
+        initializeCanvas();
+        animate();
+    </script>
+</body>
+</html>

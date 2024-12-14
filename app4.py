@@ -135,7 +135,10 @@ def visualization():
     template_mapping = {
         'airflow': 'air_flow.html',
         'waves': 'waves.html',
-        'blackhole': 'black_hole.html'
+        'blackhole': 'black_hole.html',
+        'ocean': 'ocean.html',
+        'galaxy1': 'galaxy1.html',
+        'galaxy2': 'galaxy2.html',
     }
     
     template_name = template_mapping.get(style, 'air_flow.html')

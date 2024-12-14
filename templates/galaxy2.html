@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Galaxy2 Visualization</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { 
+            margin: 0; 
+            padding: 0; 
+            overflow: hidden;
+            background: #000;
+            font-family: Arial, sans-serif;
+        }
+
+        .controls {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(8px);
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            z-index: 1000;
+            width: 80%;
+            max-width: 400px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .aqi-display {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(12px);
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            color: white;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 0 30px rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .aqi-display:before {
+            content: '';
+            position: absolute;
+            top: -3px;
+            right: -3px;
+            bottom: -3px;
+            left: -3px;
+            background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.2));
+            border-radius: 50%;
+            z-index: -1;
+        }
+
+        .aqi-value {
+            font-size: 48px;
+            font-weight: bold;
+            text-shadow: 0 0 20px currentColor;
+            margin-bottom: 5px;
+        }
+
+        .aqi-status {
+            font-size: 18px;
+            opacity: 0.9;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+
+        #aqi-slider {
+            width: 100%;
+            height: 8px;
+            -webkit-appearance: none;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            outline: none;
+        }
+
+        #aqi-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        #aqi-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.1);
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="galaxyCanvas"></canvas>
+    
+    <div class="aqi-display">
+        <div id="aqiValue" class="aqi-value">Loading...</div>
+        <div id="aqiStatus" class="aqi-status">Loading...</div>
+    </div>
+
+    <div class="controls">
+        <input type="range" id="aqi-slider" min="0" max="500" value="50">
+    </div>
+
+    <script>
+        // 從 Flask 獲取初始 AQI 值
+        const initialAqi = parseInt('{{aqi|safe}}') || 50;
+        
+        const canvas = document.getElementById('galaxyCanvas');
+        const ctx = canvas.getContext('2d');
+        let animationId = null;
+        let orbits = [];
+        let time = 0;
+
+        function getAQIColor(value) {
+            if (value <= 50) return { main: '#00ff00', accent: '#80ff80' };     // 亮綠
+            if (value <= 100) return { main: '#ffff00', accent: '#ffff80' };    // 亮黃
+            if (value <= 150) return { main: '#ff9900', accent: '#ffb366' };    // 亮橙
+            if (value <= 200) return { main: '#ff3333', accent: '#ff6666' };    // 亮紅
+            if (value <= 300) return { main: '#cc00cc', accent: '#ff00ff' };    // 鮮紫
+            return { main: '#ff0066', accent: '#ff3399' };                      // 艷紅
+        }
+
+        function getAQIStatus(value) {
+            if (value <= 50) return '良好';
+            if (value <= 100) return '普通';
+            if (value <= 150) return '輕度污染';
+            if (value <= 200) return '中度污染';
+            if (value <= 300) return '重度污染';
+            return '嚴重污染';
+        }
+
+        class Orbit {
+            constructor(config) {
+                this.radius = config.radius;
+                this.angle = Math.random() * Math.PI * 2;
+                this.speed = config.speed;
+                this.rotationX = config.rotationX;
+                this.rotationY = config.rotationY;
+                this.color = config.color;
+                this.width = config.width || 1;
+                this.particles = [];
+                this.createParticles();
+            }
+
+            createParticles() {
+                const count = Math.floor(Math.random() * 10) + 5;
+                for (let i = 0; i < count; i++) {
+                    this.particles.push({
+                        angle: (i / count) * Math.PI * 2,
+                        size: Math.random() * 2 + 1,
+                        offset: Math.random() * 0.2
+                    });
+                }
+            }
+
+            update(aqi) {
+                const intensity = aqi / 100;
+                this.angle += this.speed * (1 + intensity * 0.5);
+                
+                this.particles.forEach(particle => {
+                    particle.angle += this.speed * (1 + particle.offset + intensity * 0.5);
+                });
+            }
+
+            draw(ctx, centerX, centerY, aqi) {
+                ctx.save();
+                ctx.translate(centerX, centerY);
+                ctx.rotate(this.angle);
+                ctx.scale(1, Math.sin(this.angle * 0.5));
+
+                // 繪製軌道
+                ctx.beginPath();
+                ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = this.width;
+                ctx.globalAlpha = Math.max(0.1, 1 - aqi / 500);
+                
+                // 軌道發光效果
+                ctx.shadowColor = this.color;
+                ctx.shadowBlur = 10;
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+
+                // 粒子
+                this.particles.forEach(particle => {
+                    const x = Math.cos(particle.angle) * this.radius;
+                    const y = Math.sin(particle.angle) * this.radius;
+
+                    ctx.beginPath();
+                    ctx.arc(x, y, particle.size, 0, Math.PI * 2);
+                    ctx.fillStyle = this.color;
+                    ctx.globalAlpha = Math.max(0.2, 1 - aqi / 500);
+                    
+                    // 粒子發光效果
+                    ctx.shadowColor = this.color;
+                    ctx.shadowBlur = 15;
+                    ctx.fill();
+                });
+
+                ctx.restore();
+            }
+        }
+
+        function initializeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            createOrbits();
+        }
+
+        function createOrbits() {
+            orbits = [];
+            const aqi = parseInt(document.getElementById('aqi-slider').value);
+            const colors = getAQIColor(aqi);
+            const baseRadius = Math.min(canvas.width, canvas.height) * 0.1;
+
+            for (let i = 0; i < 8; i++) {
+                orbits.push(new Orbit({
+                    radius: baseRadius + i * baseRadius * 0.5,
+                    speed: (0.002 / (i + 1)) * (Math.random() * 0.5 + 0.75),
+                    rotationX: Math.random() * Math.PI * 2,
+                    rotationY: Math.random() * Math.PI,
+                    color: colors.main,
+                    width: Math.random() * 1 + 0.5
+                }));
+            }
+        }
+
+        // 初始化界面
+        function initializeUI() {
+            document.getElementById('aqi-slider').value = initialAqi;
+            document.getElementById('aqiValue').textContent = initialAqi;
+            const colors = getAQIColor(initialAqi);
+            document.getElementById('aqiValue').style.color = colors.main;
+            document.getElementById('aqiStatus').textContent = getAQIStatus(initialAqi);
+            
+            const aqiDisplay = document.querySelector('.aqi-display');
+            aqiDisplay.style.boxShadow = `0 0 30px ${colors.main}40`;
+            aqiDisplay.style.borderColor = `${colors.main}40`;
+        }
+
+        function animate() {
+            const aqi = parseInt(document.getElementById('aqi-slider').value);
+            const colors = getAQIColor(aqi);
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+
+            orbits.forEach(orbit => {
+                orbit.color = colors.main;
+                orbit.update(aqi);
+                orbit.draw(ctx, centerX, centerY, aqi);
+            });
+
+            // 中心發光效果
+            const gradient = ctx.createRadialGradient(
+                centerX, centerY, 0,
+                centerX, centerY, 150
+            );
+            gradient.addColorStop(0, colors.main + '40');
+            gradient.addColorStop(0.5, colors.accent + '20');
+            gradient.addColorStop(1, 'transparent');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            time++;
+            requestAnimationFrame(animate);
+        }
+
+        // 自動更新 AQI 值
+        function checkAQIUpdate() {
+            fetch(window.location.href)
+                .then(response => response.text())
+                .then(html => {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    const newAqi = parseInt(doc.querySelector('#aqiValue').textContent);
+                    if (!isNaN(newAqi) && newAqi !== parseInt(document.getElementById('aqiValue').textContent)) {
+                        document.getElementById('aqi-slider').value = newAqi;
+                        document.getElementById('aqiValue').textContent = newAqi;
+                        const colors = getAQIColor(newAqi);
+                        document.getElementById('aqiValue').style.color = colors.main;
+                        document.getElementById('aqiStatus').textContent = getAQIStatus(newAqi);
+                        createOrbits();
+                    }
+                })
+                .catch(console.error);
+        }
+
+        // 每分鐘檢查一次更新
+        setInterval(checkAQIUpdate, 60000);
+
+        // 事件監聽器
+        window.addEventListener('resize', initializeCanvas);
+
+        document.getElementById('aqi-slider').addEventListener('input', function(e) {
+            const aqi = parseInt(e.target.value);
+            const colors = getAQIColor(aqi);
+            
+            const aqiDisplay = document.querySelector('.aqi-display');
+            document.getElementById('aqiValue').textContent = aqi;
+            document.getElementById('aqiValue').style.color = colors.main;
+            document.getElementById('aqiStatus').textContent = getAQIStatus(aqi);
+            
+            aqiDisplay.style.boxShadow = `0 0 30px ${colors.main}40`;
+            aqiDisplay.style.borderColor = `${colors.main}40`;
+        });
+
+        // 初始化和啟動
+        initializeUI();
+        initializeCanvas();
+        animate();
+    </script>
+</body>
+</html>
