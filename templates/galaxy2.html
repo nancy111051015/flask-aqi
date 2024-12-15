@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Enhanced Galaxy AQI Visualization</title>
+    <title>Galaxy2</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
@@ -81,7 +81,10 @@
         <input type="range" id="aqi-slider" min="0" max="500" value="50">
     </div>
 
-    <script>
+            <script>
+        // 從 Flask 獲取初始 AQI 值
+        const initialAqi = parseInt('{{aqi|safe}}') || 50;
+        
         const canvas = document.getElementById('galaxyCanvas');
         const ctx = canvas.getContext('2d');
         let animationId = null;
@@ -358,6 +361,47 @@
             requestAnimationFrame(animate);
         }
 
+        function checkAQIUpdate() {
+            fetch(window.location.href)
+                .then(response => response.text())
+                .then(html => {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    const newAqi = parseInt(doc.querySelector('#aqiValue').textContent);
+                    if (!isNaN(newAqi) && newAqi !== parseInt(document.getElementById('aqi-slider').value)) {
+                        // 更新滑塊和顯示值
+                        document.getElementById('aqi-slider').value = newAqi;
+                        document.getElementById('aqiValue').textContent = newAqi;
+                        
+                        // 更新顏色和效果
+                        const colors = getAQIColor(newAqi);
+                        document.getElementById('aqiValue').style.color = colors.main;
+                        document.getElementById('aqiStatus').textContent = getAQIStatus(newAqi);
+                        
+                        const aqiDisplay = document.querySelector('.aqi-display');
+                        aqiDisplay.style.boxShadow = `0 0 30px ${colors.main}`;
+                        aqiDisplay.style.borderColor = colors.glow;
+                    }
+                })
+                .catch(console.error);
+        }
+
+        // 每5秒檢查一次更新
+        setInterval(checkAQIUpdate, 5000);
+
+        // 初始化界面
+        function initializeUI() {
+            document.getElementById('aqi-slider').value = initialAqi;
+            document.getElementById('aqiValue').textContent = initialAqi;
+            const colors = getAQIColor(initialAqi);
+            document.getElementById('aqiValue').style.color = colors.main;
+            document.getElementById('aqiStatus').textContent = getAQIStatus(initialAqi);
+            
+            const aqiDisplay = document.querySelector('.aqi-display');
+            aqiDisplay.style.boxShadow = `0 0 30px ${colors.main}`;
+            aqiDisplay.style.borderColor = colors.glow;
+        }
+
         // 事件監聽器
         window.addEventListener('resize', () => {
             canvas.width = window.innerWidth;
@@ -380,6 +424,7 @@
         });
 
         // 初始化和啟動動畫
+        initializeUI();
         initializeCanvas();
         animate();
     </script>
