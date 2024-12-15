@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Galaxy2 Visualization</title>
+    <title>Enhanced Galaxy AQI Visualization</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
@@ -12,69 +12,41 @@
             background: #000;
             font-family: Arial, sans-serif;
         }
-
         .controls {
             position: fixed;
             bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.3);
+            background: rgba(0, 0, 0, 0.85);
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
             backdrop-filter: blur(8px);
             padding: 20px;
             border-radius: 15px;
-            text-align: center;
             z-index: 1000;
             width: 80%;
             max-width: 400px;
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
-
         .aqi-display {
             position: fixed;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.2);
+            background: rgba(0, 0, 0, 0.3);
             backdrop-filter: blur(12px);
-            width: 140px;
-            height: 140px;
+            padding: 25px;
             border-radius: 50%;
             color: white;
             text-align: center;
+            width: 120px;
+            height: 120px;
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
             border: 2px solid rgba(255, 255, 255, 0.1);
             box-shadow: 0 0 30px rgba(255, 255, 255, 0.1);
-            transition: all 0.3s ease;
         }
-
-        .aqi-display:before {
-            content: '';
-            position: absolute;
-            top: -3px;
-            right: -3px;
-            bottom: -3px;
-            left: -3px;
-            background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.2));
-            border-radius: 50%;
-            z-index: -1;
-        }
-
-        .aqi-value {
-            font-size: 48px;
-            font-weight: bold;
-            text-shadow: 0 0 20px currentColor;
-            margin-bottom: 5px;
-        }
-
-        .aqi-status {
-            font-size: 18px;
-            opacity: 0.9;
-            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
-        }
-
         #aqi-slider {
             width: 100%;
             height: 8px;
@@ -83,7 +55,6 @@
             border-radius: 4px;
             outline: none;
         }
-
         #aqi-slider::-webkit-slider-thumb {
             -webkit-appearance: none;
             width: 20px;
@@ -91,9 +62,9 @@
             border-radius: 50%;
             background: white;
             cursor: pointer;
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
             transition: all 0.3s ease;
         }
-
         #aqi-slider::-webkit-slider-thumb:hover {
             transform: scale(1.1);
             box-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
@@ -102,33 +73,55 @@
 </head>
 <body>
     <canvas id="galaxyCanvas"></canvas>
-    
     <div class="aqi-display">
-        <div id="aqiValue" class="aqi-value">Loading...</div>
-        <div id="aqiStatus" class="aqi-status">Loading...</div>
+        <div id="aqiValue" style="font-size: 48px; font-weight: bold;">50</div>
+        <div id="aqiStatus">良好</div>
     </div>
-
     <div class="controls">
         <input type="range" id="aqi-slider" min="0" max="500" value="50">
     </div>
 
     <script>
-        // 從 Flask 獲取初始 AQI 值
-        const initialAqi = parseInt('{{aqi|safe}}') || 50;
-        
         const canvas = document.getElementById('galaxyCanvas');
         const ctx = canvas.getContext('2d');
         let animationId = null;
         let orbits = [];
+        let stars = [];
+        let glowPoints = [];
         let time = 0;
+        let baseRadius;
 
         function getAQIColor(value) {
-            if (value <= 50) return { main: '#00ff00', accent: '#80ff80' };     // 亮綠
-            if (value <= 100) return { main: '#ffff00', accent: '#ffff80' };    // 亮黃
-            if (value <= 150) return { main: '#ff9900', accent: '#ffb366' };    // 亮橙
-            if (value <= 200) return { main: '#ff3333', accent: '#ff6666' };    // 亮紅
-            if (value <= 300) return { main: '#cc00cc', accent: '#ff00ff' };    // 鮮紫
-            return { main: '#ff0066', accent: '#ff3399' };                      // 艷紅
+            if (value <= 50) return { 
+                main: 'rgba(76, 175, 80, 0.8)',  // 柔和的綠色
+                accent: 'rgba(129, 199, 132, 0.6)',
+                glow: 'rgba(76, 175, 80, 0.4)'
+            };
+            if (value <= 100) return { 
+                main: 'rgba(255, 193, 7, 0.8)',  // 溫暖的黃色
+                accent: 'rgba(255, 213, 79, 0.6)',
+                glow: 'rgba(255, 193, 7, 0.4)'
+            };
+            if (value <= 150) return { 
+                main: 'rgba(255, 152, 0, 0.8)',  // 柔和的橙色
+                accent: 'rgba(255, 183, 77, 0.6)',
+                glow: 'rgba(255, 152, 0, 0.4)'
+            };
+            if (value <= 200) return { 
+                main: 'rgba(244, 67, 54, 0.8)',  // 柔和的紅色
+                accent: 'rgba(239, 154, 154, 0.6)',
+                glow: 'rgba(244, 67, 54, 0.4)'
+            };
+            if (value <= 300) return { 
+                main: 'rgba(156, 39, 176, 0.8)', // 優雅的紫色
+                accent: 'rgba(186, 104, 200, 0.6)',
+                glow: 'rgba(156, 39, 176, 0.4)'
+            };
+            return { 
+                main: 'rgba(183, 28, 28, 0.8)',  // 深沉的紅色
+                accent: 'rgba(211, 47, 47, 0.6)',
+                glow: 'rgba(183, 28, 28, 0.4)'
+            };
         }
 
         function getAQIStatus(value) {
@@ -140,6 +133,78 @@
             return '嚴重污染';
         }
 
+        class Star {
+            constructor() {
+                this.reset();
+            }
+
+            reset() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.size = Math.random() * 1.5 + 0.5;
+                this.twinkleSpeed = Math.random() * 0.05 + 0.01;
+                this.angle = Math.random() * Math.PI * 2;
+                this.brightness = Math.random() * 0.5 + 0.5;
+            }
+
+            update() {
+                this.angle += this.twinkleSpeed;
+                this.brightness = 0.5 + Math.sin(this.angle) * 0.3;
+            }
+
+            draw(ctx) {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 255, 255, ${this.brightness})`;
+                ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
+                ctx.shadowBlur = 5;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+        }
+
+        class GlowPoint {
+            constructor() {
+                this.reset();
+            }
+
+            reset() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.size = Math.random() * 30 + 20;
+                this.alpha = Math.random() * 0.3;
+                this.speed = Math.random() * 0.002 + 0.001;
+                this.angle = Math.random() * Math.PI * 2;
+            }
+
+            update() {
+                this.angle += this.speed;
+                this.alpha = 0.1 + Math.sin(this.angle) * 0.1;
+                
+                this.x += Math.cos(this.angle) * 0.2;
+                this.y += Math.sin(this.angle) * 0.2;
+
+                if (this.x < 0 || this.x > canvas.width || 
+                    this.y < 0 || this.y > canvas.height) {
+                    this.reset();
+                }
+            }
+
+            draw(ctx, color) {
+                const gradient = ctx.createRadialGradient(
+                    this.x, this.y, 0,
+                    this.x, this.y, this.size
+                );
+                gradient.addColorStop(0, color.replace('0.8', `${this.alpha}`));
+                gradient.addColorStop(1, 'transparent');
+
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
         class Orbit {
             constructor(config) {
                 this.radius = config.radius;
@@ -147,64 +212,71 @@
                 this.speed = config.speed;
                 this.rotationX = config.rotationX;
                 this.rotationY = config.rotationY;
-                this.color = config.color;
-                this.width = config.width || 1;
+                this.baseWidth = config.width || 1;
                 this.particles = [];
                 this.createParticles();
             }
 
             createParticles() {
-                const count = Math.floor(Math.random() * 10) + 5;
+                const count = Math.floor(Math.random() * 15) + 10;
                 for (let i = 0; i < count; i++) {
                     this.particles.push({
                         angle: (i / count) * Math.PI * 2,
-                        size: Math.random() * 2 + 1,
-                        offset: Math.random() * 0.2
+                        size: Math.random() * 1.5 + 0.5,
+                        offset: Math.random() * 0.2,
+                        brightness: Math.random() * 0.5 + 0.5
                     });
                 }
             }
 
             update(aqi) {
-                const intensity = aqi / 100;
-                this.angle += this.speed * (1 + intensity * 0.5);
+                // 增加AQI值對速度的影響
+                const intensity = Math.min(aqi / 200, 1);
+                const speedMultiplier = 1 + Math.pow(intensity, 2) * 4; // 增加指數和倍數 // 使用指數增長
+                this.angle += this.speed * speedMultiplier;
                 
+                // 增加粒子的混亂運動
                 this.particles.forEach(particle => {
-                    particle.angle += this.speed * (1 + particle.offset + intensity * 0.5);
+                    const particleSpeedMultiplier = speedMultiplier * (1 + particle.offset * 2);
+                    particle.angle += this.speed * particleSpeedMultiplier;
                 });
             }
 
-            draw(ctx, centerX, centerY, aqi) {
+            draw(ctx, centerX, centerY, colors, aqi) {
+                const intensity = Math.min(aqi / 200, 1);
                 ctx.save();
                 ctx.translate(centerX, centerY);
                 ctx.rotate(this.angle);
-                ctx.scale(1, Math.sin(this.angle * 0.5));
+                ctx.scale(1, Math.sin(this.rotationY));
 
-                // 繪製軌道
-                ctx.beginPath();
-                ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
-                ctx.strokeStyle = this.color;
-                ctx.lineWidth = this.width;
-                ctx.globalAlpha = Math.max(0.1, 1 - aqi / 500);
+                const width = this.baseWidth * (0.3 + intensity * 0.7);
                 
-                // 軌道發光效果
-                ctx.shadowColor = this.color;
-                ctx.shadowBlur = 10;
+                ctx.beginPath();
+                ctx.ellipse(0, 0, this.radius, this.radius * Math.abs(Math.sin(this.rotationY)), 
+                           0, 0, Math.PI * 2);
+                ctx.strokeStyle = colors.main;
+                ctx.lineWidth = width;
+                ctx.globalAlpha = Math.max(0.1, 0.8 - intensity * 0.3);
                 ctx.stroke();
-                ctx.shadowBlur = 0;
 
-                // 粒子
                 this.particles.forEach(particle => {
                     const x = Math.cos(particle.angle) * this.radius;
-                    const y = Math.sin(particle.angle) * this.radius;
+                    const y = Math.sin(particle.angle) * this.radius * Math.abs(Math.sin(this.rotationY));
 
                     ctx.beginPath();
-                    ctx.arc(x, y, particle.size, 0, Math.PI * 2);
-                    ctx.fillStyle = this.color;
-                    ctx.globalAlpha = Math.max(0.2, 1 - aqi / 500);
+                    ctx.arc(x, y, particle.size * (1 + intensity * 0.3), 0, Math.PI * 2);
+                    ctx.fillStyle = colors.accent;
+                    ctx.globalAlpha = particle.brightness * (0.8 - intensity * 0.2);
                     
-                    // 粒子發光效果
-                    ctx.shadowColor = this.color;
-                    ctx.shadowBlur = 15;
+                    ctx.shadowColor = colors.glow;
+                    ctx.shadowBlur = 10 + intensity * 5;
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+
+                    ctx.beginPath();
+                    ctx.arc(x, y, particle.size * 2, 0, Math.PI * 2);
+                    ctx.fillStyle = colors.glow;
+                    ctx.globalAlpha = particle.brightness * 0.3;
                     ctx.fill();
                 });
 
@@ -212,41 +284,28 @@
             }
         }
 
-        function initializeCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            createOrbits();
-        }
-
         function createOrbits() {
             orbits = [];
             const aqi = parseInt(document.getElementById('aqi-slider').value);
-            const colors = getAQIColor(aqi);
-            const baseRadius = Math.min(canvas.width, canvas.height) * 0.1;
+            baseRadius = Math.min(canvas.width, canvas.height) * 0.1;
 
-            for (let i = 0; i < 8; i++) {
+            for (let i = 0; i < 12; i++) {
                 orbits.push(new Orbit({
-                    radius: baseRadius + i * baseRadius * 0.5,
+                    radius: baseRadius + i * baseRadius * 0.4,
                     speed: (0.002 / (i + 1)) * (Math.random() * 0.5 + 0.75),
                     rotationX: Math.random() * Math.PI * 2,
                     rotationY: Math.random() * Math.PI,
-                    color: colors.main,
-                    width: Math.random() * 1 + 0.5
+                    width: Math.random() * 1.5 + 0.5
                 }));
             }
         }
 
-        // 初始化界面
-        function initializeUI() {
-            document.getElementById('aqi-slider').value = initialAqi;
-            document.getElementById('aqiValue').textContent = initialAqi;
-            const colors = getAQIColor(initialAqi);
-            document.getElementById('aqiValue').style.color = colors.main;
-            document.getElementById('aqiStatus').textContent = getAQIStatus(initialAqi);
-            
-            const aqiDisplay = document.querySelector('.aqi-display');
-            aqiDisplay.style.boxShadow = `0 0 30px ${colors.main}40`;
-            aqiDisplay.style.borderColor = `${colors.main}40`;
+        function initializeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            stars = Array(200).fill().map(() => new Star());
+            glowPoints = Array(15).fill().map(() => new GlowPoint());
+            createOrbits();
         }
 
         function animate() {
@@ -256,71 +315,71 @@
             ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+            stars.forEach(star => {
+                star.update();
+                star.draw(ctx);
+            });
+
+            glowPoints.forEach(point => {
+                point.update();
+                point.draw(ctx, colors.main);
+            });
+
             const centerX = canvas.width / 2;
             const centerY = canvas.height / 2;
 
             orbits.forEach(orbit => {
-                orbit.color = colors.main;
                 orbit.update(aqi);
-                orbit.draw(ctx, centerX, centerY, aqi);
+                orbit.draw(ctx, centerX, centerY, colors, aqi);
             });
 
-            // 中心發光效果
             const gradient = ctx.createRadialGradient(
                 centerX, centerY, 0,
-                centerX, centerY, 150
+                centerX, centerY, baseRadius * 2
             );
-            gradient.addColorStop(0, colors.main + '40');
-            gradient.addColorStop(0.5, colors.accent + '20');
+            gradient.addColorStop(0, colors.main);
+            gradient.addColorStop(0.2, colors.glow);
             gradient.addColorStop(1, 'transparent');
+            
+            ctx.globalCompositeOperation = 'screen';
             ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.globalCompositeOperation = 'source-over';
+
+            document.getElementById('aqiValue').textContent = aqi;
+            document.getElementById('aqiValue').style.color = colors.main;
+            document.getElementById('aqiStatus').textContent = getAQIStatus(aqi);
+
+            const aqiDisplay = document.querySelector('.aqi-display');
+            aqiDisplay.style.boxShadow = `0 0 30px ${colors.main}`;
+            aqiDisplay.style.borderColor = colors.glow;
 
             time++;
             requestAnimationFrame(animate);
         }
 
-        // 自動更新 AQI 值
-        function checkAQIUpdate() {
-            fetch(window.location.href)
-                .then(response => response.text())
-                .then(html => {
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(html, 'text/html');
-                    const newAqi = parseInt(doc.querySelector('#aqiValue').textContent);
-                    if (!isNaN(newAqi) && newAqi !== parseInt(document.getElementById('aqiValue').textContent)) {
-                        document.getElementById('aqi-slider').value = newAqi;
-                        document.getElementById('aqiValue').textContent = newAqi;
-                        const colors = getAQIColor(newAqi);
-                        document.getElementById('aqiValue').style.color = colors.main;
-                        document.getElementById('aqiStatus').textContent = getAQIStatus(newAqi);
-                        createOrbits();
-                    }
-                })
-                .catch(console.error);
-        }
-
-        // 每分鐘檢查一次更新
-        setInterval(checkAQIUpdate, 60000);
-
         // 事件監聽器
-        window.addEventListener('resize', initializeCanvas);
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            // 重新初始化所有元素
+            stars.forEach(star => star.reset());
+            glowPoints.forEach(point => point.reset());
+            createOrbits();
+        });
 
         document.getElementById('aqi-slider').addEventListener('input', function(e) {
             const aqi = parseInt(e.target.value);
             const colors = getAQIColor(aqi);
             
+            // 更新顯示界面的顏色和陰影
             const aqiDisplay = document.querySelector('.aqi-display');
-            document.getElementById('aqiValue').textContent = aqi;
-            document.getElementById('aqiValue').style.color = colors.main;
-            document.getElementById('aqiStatus').textContent = getAQIStatus(aqi);
-            
-            aqiDisplay.style.boxShadow = `0 0 30px ${colors.main}40`;
-            aqiDisplay.style.borderColor = `${colors.main}40`;
+            aqiDisplay.style.boxShadow = `0 0 30px ${colors.main}`;
+            aqiDisplay.style.borderColor = colors.glow;
         });
 
-        // 初始化和啟動
-        initializeUI();
+        // 初始化和啟動動畫
         initializeCanvas();
         animate();
     </script>
