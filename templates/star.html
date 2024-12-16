@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Star</title>
+    <title>Enhanced Dreamy Meteor Shower AQI Visualization V6</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
@@ -95,8 +95,8 @@
     </div>
 
     <script>
-        // 從 Flask 獲取初始 AQI 值
-        const currentAqi = {{ aqi|safe }} || 50;  // 使用Flask傳遞的值，如果未定義則默認為50
+        // 從 Flask 獲取初始 AQI 值（修正語法）
+        const currentAqi = "{{aqi|safe}}" || 50;  // 使用 Flask 傳遞的值，如果未定義則默認為 50
         
         const canvas = document.getElementById('meteorCanvas');
         const ctx = canvas.getContext('2d');
@@ -105,9 +105,21 @@
         let nebula = [];
         let time = 0;
 
-        // 設置初始 AQI 值到滑桿和顯示區
-        document.getElementById('aqiValue').textContent = currentAqi;
-        document.getElementById('aqi-slider').value = currentAqi;
+        // 設置初始 AQI 值並更新視覺效果
+        function initializeAQI() {
+            const colors = getAQIColor(currentAqi);
+            document.getElementById('aqiValue').textContent = currentAqi;
+            document.getElementById('aqiValue').style.color = colors.main;
+            document.getElementById('aqiStatus').textContent = getAQIStatus(currentAqi);
+            document.getElementById('aqi-slider').value = currentAqi;
+            
+            const aqiDisplay = document.querySelector('.aqi-display');
+            aqiDisplay.style.boxShadow = `0 0 30px ${colors.main}, 0 0 60px ${colors.glow}`;
+            aqiDisplay.style.borderColor = colors.trail;
+        }
+
+        // 在腳本開始時立即調用初始化
+        initializeAQI();
         // 初始化變量
 
         function getAQIColor(value) {
