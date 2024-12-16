@@ -139,6 +139,7 @@ def visualization():
         'ocean': 'ocean.html',
         'galaxy1': 'galaxy1.html',
         'galaxy2': 'galaxy2.html',
+        'star': 'star.html'
     }
     
     template_name = template_mapping.get(style, 'air_flow.html')

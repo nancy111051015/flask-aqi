@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Star</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+    <style>
+        body { 
+            margin: 0; 
+            padding: 0; 
+            overflow: hidden;
+            background: #000;
+            font-family: Arial, sans-serif;
+        }
+        .controls {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.85);
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(8px);
+            padding: 20px;
+            border-radius: 15px;
+            z-index: 1000;
+            width: 80%;
+            max-width: 400px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .aqi-display {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(12px);
+            padding: 25px;
+            border-radius: 50%;
+            color: white;
+            text-align: center;
+            width: 120px;
+            height: 120px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 0 30px rgba(255, 255, 255, 0.1);
+            transition: all 0.5s ease;
+        }
+        #aqi-slider {
+            width: 100%;
+            height: 8px;
+            -webkit-appearance: none;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            outline: none;
+        }
+        #aqi-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: white;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+        }
+        #aqi-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.1);
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
+        }
+        .aqi-value {
+            font-size: 48px;
+            font-weight: bold;
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+            margin-bottom: 5px;
+            transition: all 0.5s ease;
+        }
+        .aqi-status {
+            font-size: 18px;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="meteorCanvas"></canvas>
+    <div class="aqi-display">
+        <div id="aqiValue" class="aqi-value">50</div>
+        <div id="aqiStatus" class="aqi-status">良好</div>
+    </div>
+    <div class="controls">
+        <input type="range" id="aqi-slider" min="0" max="500" value="50">
+    </div>
+
+    <script>
+        // 從 Flask 獲取初始 AQI 值
+        const currentAqi = {{ aqi|safe }} || 50;  // 使用Flask傳遞的值，如果未定義則默認為50
+        
+        const canvas = document.getElementById('meteorCanvas');
+        const ctx = canvas.getContext('2d');
+        let meteors = [];
+        let stars = [];
+        let nebula = [];
+        let time = 0;
+
+        // 設置初始 AQI 值到滑桿和顯示區
+        document.getElementById('aqiValue').textContent = currentAqi;
+        document.getElementById('aqi-slider').value = currentAqi;
+        // 初始化變量
+
+        function getAQIColor(value) {
+            if (value <= 50) return { 
+                main: '#4CAF50',    // 柔和的綠色
+                trail: '#81C784',    // 淡綠色尾跡
+                glow: '#C8E6C9',     // 柔光
+                nebula: 'rgba(76, 175, 80, 0.05)' // 星雲效果
+            };
+            if (value <= 100) return { 
+                main: '#FFD700',    
+                trail: '#FFF59D',    
+                glow: '#FFF9C4',
+                nebula: 'rgba(255, 215, 0, 0.05)'
+            };
+            if (value <= 150) return { 
+                main: '#FF9800',    
+                trail: '#FFB74D',    
+                glow: '#FFE0B2',
+                nebula: 'rgba(255, 152, 0, 0.05)'
+            };
+            if (value <= 200) return { 
+                main: '#F44336',    
+                trail: '#E57373',    
+                glow: '#FFCDD2',
+                nebula: 'rgba(244, 67, 54, 0.05)'
+            };
+            if (value <= 300) return { 
+                main: '#9C27B0',    
+                trail: '#BA68C8',    
+                glow: '#E1BEE7',
+                nebula: 'rgba(156, 39, 176, 0.05)'
+            };
+            return { 
+                main: '#B71C1C',    
+                trail: '#E57373',    
+                glow: '#FFCDD2',
+                nebula: 'rgba(183, 28, 28, 0.05)'
+            };
+        }
+
+        function getAQIStatus(value) {
+            if (value <= 50) return '良好';
+            if (value <= 100) return '普通';
+            if (value <= 150) return '輕度污染';
+            if (value <= 200) return '中度污染';
+            if (value <= 300) return '重度污染';
+            return '嚴重污染';
+        }
+
+        class NebulaCloud {
+            constructor() {
+                this.reset();
+            }
+
+            reset() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.size = Math.random() * 200 + 100;
+                this.alpha = Math.random() * 0.05;
+                this.direction = Math.random() * Math.PI * 2;
+                this.speed = Math.random() * 0.2 + 0.1;
+            }
+
+            update() {
+                this.x += Math.cos(this.direction) * this.speed;
+                this.y += Math.sin(this.direction) * this.speed;
+
+                if (this.x < -this.size || this.x > canvas.width + this.size ||
+                    this.y < -this.size || this.y > canvas.height + this.size) {
+                    this.reset();
+                }
+            }
+
+            draw(ctx, color) {
+                const gradient = ctx.createRadialGradient(
+                    this.x, this.y, 0,
+                    this.x, this.y, this.size
+                );
+                gradient.addColorStop(0, color);
+                gradient.addColorStop(1, 'transparent');
+
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        class Star {
+            constructor() {
+                this.reset();
+            }
+
+            reset() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.size = Math.random() * 2 + 0.5;
+                this.twinkleSpeed = Math.random() * 0.05 + 0.01;
+                this.angle = Math.random() * Math.PI * 2;
+                this.brightness = Math.random() * 0.5 + 0.5;
+                this.maxBrightness = this.brightness;
+                this.pulsePhase = Math.random() * Math.PI * 2;
+                this.pulseSpeed = Math.random() * 0.02 + 0.01;
+            }
+
+            update() {
+                this.angle += this.twinkleSpeed;
+                this.pulsePhase += this.pulseSpeed;
+                this.brightness = this.maxBrightness * (0.7 + Math.sin(this.angle) * 0.3);
+            }
+
+            draw(ctx) {
+                const pulseIntensity = (Math.sin(this.pulsePhase) + 1) * 0.5; // 0 到 1 之間的值
+                const glowSize = this.size * (2 + pulseIntensity * 1.5);
+                
+                // 最外層柔和光暈
+                const outerGradient = ctx.createRadialGradient(
+                    this.x, this.y, 0,
+                    this.x, this.y, glowSize * 2
+                );
+                outerGradient.addColorStop(0, `rgba(255, 255, 255, ${this.brightness * 0.05})`);
+                outerGradient.addColorStop(0.5, `rgba(255, 255, 255, ${this.brightness * 0.02})`);
+                outerGradient.addColorStop(1, 'transparent');
+                
+                ctx.fillStyle = outerGradient;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, glowSize * 2, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 中層光暈
+                const midGradient = ctx.createRadialGradient(
+                    this.x, this.y, 0,
+                    this.x, this.y, glowSize
+                );
+                midGradient.addColorStop(0, `rgba(255, 255, 255, ${this.brightness * 0.2})`);
+                midGradient.addColorStop(0.5, `rgba(255, 255, 255, ${this.brightness * 0.1})`);
+                midGradient.addColorStop(1, 'transparent');
+                
+                ctx.fillStyle = midGradient;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, glowSize, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 核心星星
+                const coreGradient = ctx.createRadialGradient(
+                    this.x, this.y, 0,
+                    this.x, this.y, this.size
+                );
+                coreGradient.addColorStop(0, `rgba(255, 255, 255, ${this.brightness})`);
+                coreGradient.addColorStop(0.8, `rgba(255, 255, 255, ${this.brightness * 0.8})`);
+                coreGradient.addColorStop(1, `rgba(255, 255, 255, ${this.brightness * 0.2})`);
+
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = coreGradient;
+                
+                // 輕微的發光效果
+                ctx.shadowColor = `rgba(255, 255, 255, ${this.brightness * 0.5})`;
+                ctx.shadowBlur = 5;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+
+                // 柔和的十字光芒
+                const rayLength = this.size * (1.5 + pulseIntensity);
+                const rayGradient = ctx.createLinearGradient(
+                    this.x - rayLength, this.y,
+                    this.x + rayLength, this.y
+                );
+                rayGradient.addColorStop(0, 'transparent');
+                rayGradient.addColorStop(0.5, `rgba(255, 255, 255, ${this.brightness * 0.2})`);
+                rayGradient.addColorStop(1, 'transparent');
+
+                ctx.strokeStyle = rayGradient;
+                ctx.lineWidth = 0.5;
+                
+                // 水平光芒
+                ctx.beginPath();
+                ctx.moveTo(this.x - rayLength, this.y);
+                ctx.lineTo(this.x + rayLength, this.y);
+                ctx.stroke();
+                
+                // 垂直光芒
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(Math.PI / 2);
+                ctx.beginPath();
+                ctx.moveTo(-rayLength, 0);
+                ctx.lineTo(rayLength, 0);
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+
+        class Meteor {
+            constructor() {
+                this.reset();
+            }
+
+            reset() {
+                this.x = Math.random() * canvas.width * 1.5 - canvas.width * 0.25;
+                this.y = -50;
+                this.size = Math.random() * 2 + 1;
+                this.baseSpeed = Math.random() * 2 + 3;
+                this.speed = this.baseSpeed;
+                this.baseAngle = Math.PI / 4;
+                this.angle = this.baseAngle + (Math.random() - 0.5) * 0.2;
+                this.trail = [];
+                this.maxTrailLength = Math.floor(Math.random() * 20) + 20;
+                this.brightness = Math.random() * 0.5 + 0.5;
+                this.oscillationAmplitude = Math.random() * 0.1;
+                this.oscillationFrequency = Math.random() * 0.05 + 0.02;
+                this.time = Math.random() * 1000;
+            }
+
+            update(aqi) {
+                this.time += 1;
+                const intensity = Math.min(aqi / 100, 5);
+                
+                // 扭曲運動
+                const oscillation = Math.sin(this.time * this.oscillationFrequency) * 
+                                  this.oscillationAmplitude * intensity;
+                this.angle = this.baseAngle + oscillation;
+                
+                // 速度變化
+                this.speed = this.baseSpeed * (1 + intensity * 0.5);
+
+                // 更新位置
+                this.x += Math.cos(this.angle) * this.speed;
+                this.y += Math.sin(this.angle) * this.speed;
+
+                // 記錄軌跡
+                this.trail.unshift({ 
+                    x: this.x, 
+                    y: this.y,
+                    angle: this.angle 
+                });
+                
+                if (this.trail.length > this.maxTrailLength) {
+                    this.trail.pop();
+                }
+
+                if (this.y > canvas.height || this.x < -100 || this.x > canvas.width + 100) {
+                    this.reset();
+                }
+            }
+
+            draw(ctx, colors) {
+                if (this.trail.length < 2) return;
+
+                // 發光尾跡
+                ctx.beginPath();
+                ctx.moveTo(this.trail[0].x, this.trail[0].y);
+                
+                // 使用貝塞爾曲線
+                for (let i = 1; i < this.trail.length - 1; i++) {
+                    const xc = (this.trail[i].x + this.trail[i + 1].x) / 2;
+                    const yc = (this.trail[i].y + this.trail[i + 1].y) / 2;
+                    ctx.quadraticCurveTo(this.trail[i].x, this.trail[i].y, xc, yc);
+                }
+
+                // 主尾跡漸變
+                const gradient = ctx.createLinearGradient(
+                    this.trail[0].x, this.trail[0].y,
+                    this.trail[this.trail.length - 1].x,
+                    this.trail[this.trail.length - 1].y
+                );
+                
+                gradient.addColorStop(0, colors.main);
+                gradient.addColorStop(0.4, colors.trail);
+                gradient.addColorStop(1, 'transparent');
+
+                ctx.strokeStyle = gradient;
+                ctx.lineWidth = this.size;
+                ctx.lineCap = 'round';
+                ctx.shadowColor = colors.glow;
+                ctx.shadowBlur = 20;
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+
+                // 流星頭部光暈
+                const headGradient = ctx.createRadialGradient(
+                    this.x, this.y, 0,
+                    this.x, this.y, this.size * 4
+                );
+                headGradient.addColorStop(0, colors.main);
+                headGradient.addColorStop(0.4, colors.trail);
+                headGradient.addColorStop(1, 'transparent');
+
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size * 4, 0, Math.PI * 2);
+                ctx.fillStyle = headGradient;
+                ctx.fill();
+
+                // 發光核心
+                ctx.shadowColor = colors.main;
+                ctx.shadowBlur = 30;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = colors.glow;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+        }
+
+        function initCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            // 初始化星雲效果
+            nebula = Array(8).fill().map(() => new NebulaCloud());
+
+            // 初始化星星 - 數量會根據AQI值動態調整
+            const baseStarCount = 300;
+            const aqi = parseInt(document.getElementById('aqi-slider').value);
+            const starCount = Math.max(20, Math.floor(baseStarCount * (1 - aqi/500)));
+            stars = Array(starCount).fill().map(() => new Star());
+
+            // 初始化流星
+            meteors = Array(20).fill().map(() => new Meteor());
+        }
+
+        function updateStarCount(aqi) {
+            const baseStarCount = 300;
+            const targetCount = Math.max(20, Math.floor(baseStarCount * (1 - aqi/500)));
+            
+            if (stars.length > targetCount) {
+                stars = stars.slice(0, targetCount);
+            } else if (stars.length < targetCount) {
+                const newStars = Array(targetCount - stars.length)
+                    .fill()
+                    .map(() => new Star());
+                stars = [...stars, ...newStars];
+            }
+        }
+
+        function updateVisuals(aqi) {
+            document.getElementById('aqiValue').textContent = aqi;
+            document.getElementById('aqi-slider').value = aqi;
+            document.getElementById('aqiStatus').textContent = getAQIStatus(aqi);
+            const colors = getAQIColor(aqi);
+            const aqiDisplay = document.querySelector('.aqi-display');
+            aqiDisplay.style.boxShadow = `0 0 30px ${colors.main}, 0 0 60px ${colors.glow}`;
+            aqiDisplay.style.borderColor = colors.trail;
+            document.getElementById('aqiValue').style.color = colors.main;
+        }
+
+        function animate() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const aqi = parseInt(document.getElementById('aqi-slider').value);
+            const colors = getAQIColor(aqi);
+            
+            updateStarCount(aqi);
+
+            ctx.globalCompositeOperation = 'screen';
+            nebula.forEach(cloud => {
+                cloud.update();
+                cloud.draw(ctx, colors.nebula);
+            });
+            ctx.globalCompositeOperation = 'source-over';
+
+            stars.forEach(star => {
+                star.update();
+                star.draw(ctx);
+            });
+
+            meteors.forEach(meteor => {
+                meteor.update(aqi);
+                meteor.draw(ctx, colors);
+            });
+
+            const globalGlow = ctx.createRadialGradient(
+                canvas.width/2, canvas.height/2, 0,
+                canvas.width/2, canvas.height/2, canvas.height
+            );
+            globalGlow.addColorStop(0, colors.nebula);
+            globalGlow.addColorStop(1, 'transparent');
+            
+            ctx.globalCompositeOperation = 'screen';
+            ctx.fillStyle = globalGlow;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.globalCompositeOperation = 'source-over';
+
+            time++;
+            requestAnimationFrame(animate);
+        }
+
+        // 事件監聽器
+        window.addEventListener('resize', initCanvas);
+
+        document.getElementById('aqi-slider').addEventListener('input', function(e) {
+            isManualMode = true;  // 切換到手動模式
+            const aqi = parseInt(e.target.value);
+            updateVisuals(aqi);
+        });
+
+        // 初始化和啟動
+        initCanvas();
+        animate();
+    </script>
+</body>
+</html>
