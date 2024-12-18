@@ -361,33 +361,9 @@
             requestAnimationFrame(animate);
         }
 
-        function checkAQIUpdate() {
-            fetch(window.location.href)
-                .then(response => response.text())
-                .then(html => {
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(html, 'text/html');
-                    const newAqi = parseInt(doc.querySelector('#aqiValue').textContent);
-                    if (!isNaN(newAqi) && newAqi !== parseInt(document.getElementById('aqi-slider').value)) {
-                        // 更新滑塊和顯示值
-                        document.getElementById('aqi-slider').value = newAqi;
-                        document.getElementById('aqiValue').textContent = newAqi;
-                        
-                        // 更新顏色和效果
-                        const colors = getAQIColor(newAqi);
-                        document.getElementById('aqiValue').style.color = colors.main;
-                        document.getElementById('aqiStatus').textContent = getAQIStatus(newAqi);
-                        
-                        const aqiDisplay = document.querySelector('.aqi-display');
-                        aqiDisplay.style.boxShadow = `0 0 30px ${colors.main}`;
-                        aqiDisplay.style.borderColor = colors.glow;
-                    }
-                })
-                .catch(console.error);
-        }
+        
 
-        // 每5秒檢查一次更新
-        setInterval(checkAQIUpdate, 5000);
+
 
         // 初始化界面
         function initializeUI() {
@@ -416,6 +392,9 @@
         document.getElementById('aqi-slider').addEventListener('input', function(e) {
             const aqi = parseInt(e.target.value);
             const colors = getAQIColor(aqi);
+            document.getElementById('aqiValue').textContent = aqi;
+            document.getElementById('aqiValue').style.color = colors.main;
+            document.getElementById('aqiStatus').textContent = getAQIStatus(aqi);
             
             // 更新顯示界面的顏色和陰影
             const aqiDisplay = document.querySelector('.aqi-display');
